@@ -33,7 +33,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: space-between;
-            padding: calc(20px + env(safe-area-inset-top)) 15px calc(20px + env(safe-area-inset-bottom)) 15px;
+            padding: calc(15px + env(safe-area-inset-top)) 15px calc(15px + env(safe-area-inset-bottom)) 15px;
             touch-action: none;
             position: relative;
         }
@@ -92,7 +92,74 @@
             color: #fff;
         }
 
-        /* Mode Dynamic Timer Bar Container */
+        /* Booster Tray Layout styles */
+        #booster-dock {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .booster-btn {
+            flex: 1;
+            background: #1e1e28;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 8px;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .booster-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .booster-icon {
+            font-size: 18px;
+        }
+
+        .booster-count {
+            font-size: 9px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 1px 6px;
+            border-radius: 8px;
+            color: #ffcc00;
+            font-weight: bold;
+            margin-top: 2px;
+        }
+
+        /* Dynamic Popup Toast Alert */
+        #toast-alert {
+            position: absolute;
+            top: calc(80px + env(safe-area-inset-top));
+            background: linear-gradient(135deg, #2c2c3e, #1e1e28);
+            border: 1px solid #ffcc00;
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            z-index: 20;
+            display: none;
+            animation: popIn 0.3s ease-out;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.7); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
         #timer-bar-container {
             width: 100%;
             max-width: 400px;
@@ -101,7 +168,7 @@
             border-radius: 3px;
             margin-bottom: 10px;
             overflow: hidden;
-            display: none; /* Only visible in Timed mode */
+            display: none;
         }
 
         #timer-bar {
@@ -128,7 +195,6 @@
             box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
         }
 
-        /* Main Menu App Overlay Screen */
         #menu-overlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -184,7 +250,8 @@
 </head>
 <body>
 
-<!-- Menu Overlay UI Grid Screen -->
+<div id="toast-alert">Item Earned! 🎉</div>
+
 <div id="menu-overlay">
     <h1 class="menu-title">Block Smash</h1>
     <button class="menu-btn" onclick="startGame('classic')">
@@ -218,6 +285,24 @@
     </div>
 </header>
 
+<div id="booster-dock">
+    <button class="booster-btn" id="btn-defuse" onclick="useDefuse()">
+        <span class="booster-icon">🧨</span>
+        <span>Defuse</span>
+        <span class="booster-count" id="count-defuse">3</span>
+    </button>
+    <button class="booster-btn" id="btn-time" onclick="useTimeExtend()">
+        <span class="booster-icon">⏱️</span>
+        <span>Time +</span>
+        <span class="booster-count" id="count-time">3</span>
+    </button>
+    <button class="booster-btn" id="btn-auto" onclick="useAutoComplete()">
+        <span class="booster-icon">✨</span>
+        <span>Auto</span>
+        <span class="booster-count" id="count-auto">3</span>
+    </button>
+</div>
+
 <div id="timer-bar-container">
     <div id="timer-bar"></div>
 </div>
@@ -243,6 +328,13 @@
     const timerBarContainer = document.getElementById('timer-bar-container');
     const timerBar = document.getElementById('timer-bar');
     const menuOverlay = document.getElementById('menu-overlay');
+    const toastAlert = document.getElementById('toast-alert');
+
+    const btnDefuse = document.getElementById('btn-defuse');
+    const btnTime = document.getElementById('btn-time');
+    const countDefuseEl = document.getElementById('count-defuse');
+    const countTimeEl = document.getElementById('count-time');
+    const countAutoEl = document.getElementById('count-auto');
 
     const GRID_SIZE = 8;
     const CELL_SIZE = 44;
@@ -253,7 +345,15 @@
     let currentGameMode = 'classic';
     let bestScore = 0;
 
-    // Grid cells lookups: 0 = empty, string = static color, object = complex attributes (like bomb)
+    // Track state to avoid repeatedly giving the score milestone
+    let nextScoreMilestone = 1000; 
+
+    let boosters = {
+        defuse: 3,
+        time: 3,
+        auto: 3
+    };
+
     let grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
 
     const SHAPES = [
@@ -278,18 +378,22 @@
     let dragY = 0;
     let isDragging = false;
 
-    // Timed Mode Variables
-    let timeRemaining = 100; // Percentage out of 100
+    let timeRemaining = 100; 
     let timerInterval = null;
 
     function startGame(mode) {
         currentGameMode = mode;
         menuOverlay.style.display = 'none';
         modeTagEl.innerText = mode;
+        nextScoreMilestone = 1000; // Reset milestone threshold tracking
 
-        // Fetch high score dynamically per game mode ruleset
         bestScore = localStorage.getItem(`block_smash_best_${mode}`) || 0;
         bestEl.innerText = bestScore;
+
+        btnDefuse.disabled = (mode !== 'blast');
+        btnTime.disabled = (mode !== 'timed');
+
+        updateBoosterUI();
 
         if (mode === 'timed') {
             timerBarContainer.style.display = 'block';
@@ -303,10 +407,26 @@
         init();
     }
 
+    function triggerToast(message) {
+        toastAlert.innerText = message;
+        toastAlert.style.display = 'block';
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Reward double vibration pulse
+        
+        setTimeout(() => {
+            toastAlert.style.display = 'none';
+        }, 2000);
+    }
+
+    function updateBoosterUI() {
+        countDefuseEl.innerText = boosters.defuse;
+        countTimeEl.innerText = boosters.time;
+        countAutoEl.innerText = boosters.auto;
+    }
+
     function startTimedTicker() {
         clearInterval(timerInterval);
         timerInterval = setInterval(() => {
-            timeRemaining -= 1.5; // Tick speed
+            timeRemaining -= 1.5; 
             if (timeRemaining <= 0) {
                 timeRemaining = 0;
                 gameOver("Time's Up!");
@@ -321,6 +441,90 @@
         scoreEl.innerText = score;
         generateChoices();
         draw();
+    }
+
+    function useDefuse() {
+        if (currentGameMode !== 'blast' || boosters.defuse <= 0) return;
+        let defusedCount = 0;
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                if (typeof grid[r][c] === 'object' && grid[r][c].type === 'bomb') {
+                    grid[r][c] = '#555555'; 
+                    defusedCount++;
+                }
+            }
+        }
+        if (defusedCount > 0) {
+            boosters.defuse--;
+            updateBoosterUI();
+            if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
+            draw();
+        }
+    }
+
+    function useTimeExtend() {
+        if (currentGameMode !== 'timed' || boosters.time <= 0) return;
+        boosters.time--;
+        timeRemaining = Math.min(100, timeRemaining + 25); 
+        timerBar.style.width = `${timeRemaining}%`;
+        updateBoosterUI();
+        if (navigator.vibrate) navigator.vibrate([15, 10, 50]);
+    }
+
+    function useAutoComplete() {
+        if (boosters.auto <= 0) return;
+        let targetType = ''; 
+        let indexTarget = -1;
+        let maxCount = -1;
+
+        for (let r = 0; r < GRID_SIZE; r++) {
+            let filledCount = grid[r].filter(cell => cell !== 0).length;
+            if (filledCount > maxCount && filledCount < GRID_SIZE && filledCount > 0) {
+                maxCount = filledCount;
+                targetType = 'row';
+                indexTarget = r;
+            }
+        }
+
+        for (let c = 0; c < GRID_SIZE; c++) {
+            let filledCount = 0;
+            for (let r = 0; r < GRID_SIZE; r++) {
+                if (grid[r][c] !== 0) filledCount++;
+            }
+            if (filledCount > maxCount && filledCount < GRID_SIZE && filledCount > 0) {
+                maxCount = filledCount;
+                targetType = 'col';
+                indexTarget = c;
+            }
+        }
+
+        if (indexTarget === -1) {
+            targetType = 'row';
+            indexTarget = Math.floor(Math.random() * GRID_SIZE);
+        }
+
+        if (targetType === 'row') {
+            grid[indexTarget].fill('#ffffff'); 
+        } else {
+            for (let r = 0; r < GRID_SIZE; r++) grid[r][indexTarget] = '#ffffff';
+        }
+
+        boosters.auto--;
+        updateBoosterUI();
+        draw();
+
+        setTimeout(() => {
+            if (targetType === 'row') {
+                grid[indexTarget].fill(0);
+            } else {
+                for (let r = 0; r < GRID_SIZE; r++) grid[r][indexTarget] = 0;
+            }
+            score += 100; 
+            scoreEl.innerText = score;
+            if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+            draw();
+            checkGameOver();
+        }, 150);
     }
 
     function generateChoices() {
@@ -373,23 +577,19 @@
         ctx.save();
         if (isGhost) ctx.globalAlpha = 0.3;
         
-        // Handle complex structures (like bombs) vs regular strings
         let color = (typeof cell === 'object') ? cell.color : cell;
 
-        // Block base profile body
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.roundRect(x + 1, y + 1, size - 2, size - 2, 6);
         ctx.fill();
 
         if (!isGhost) {
-            // Bevel highlights
             ctx.fillStyle = 'rgba(255,255,255,0.18)';
             ctx.beginPath();
             ctx.roundRect(x + 2, y + 2, size - 4, 6, 2);
             ctx.fill();
 
-            // Special Blast Mode overlay rendering
             if (typeof cell === 'object' && cell.type === 'bomb') {
                 ctx.fillStyle = '#ffffff';
                 ctx.font = `bold ${Math.floor(size * 0.45)}px sans-serif`;
@@ -405,13 +605,11 @@
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Grid Housing Base Layer
         ctx.fillStyle = '#1e1e28';
         ctx.beginPath();
         ctx.roundRect(GRID_OFFSET_X - 6, GRID_OFFSET_Y - 6, (GRID_SIZE * CELL_SIZE) + 12, (GRID_SIZE * CELL_SIZE) + 12, 16);
         ctx.fill();
         
-        // Matrix Render Engine loops
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
                 let x = GRID_OFFSET_X + c * CELL_SIZE;
@@ -427,7 +625,6 @@
             }
         }
 
-        // 2. Real-time Ghost Placement Shadow engine calculations
         let snapRow = -1, snapCol = -1;
         if (isDragging && dragIdx !== -1) {
             let shape = choices[dragIdx];
@@ -451,13 +648,11 @@
             }
         }
 
-        // 3. Selection Tray Dock
         ctx.fillStyle = '#12121a';
         ctx.beginPath();
         ctx.roundRect(16, CHOICE_Y - 10, canvas.width - 32, 130, 20);
         ctx.fill();
 
-        // Stationed Pieces Render Engine
         for (let i = 0; i < 3; i++) {
             if (choices[i] && dragIdx !== i) {
                 let shape = choices[i];
@@ -477,7 +672,6 @@
             }
         }
 
-        // 4. Live Drag Object Rendering
         if (isDragging && dragIdx !== -1) {
             let shape = choices[dragIdx];
             let offsetX = (shape.blocks[0].length * CELL_SIZE) / 2;
@@ -509,14 +703,14 @@
 
     function placeShape(shape, row, col) {
         let points = 0;
-        let isSpawnBombTurn = (currentGameMode === 'blast' && Math.random() < 0.25); // 25% chance of placed block conversion to bomb
+        let isSpawnBombTurn = (currentGameMode === 'blast' && Math.random() < 0.25); 
 
         for (let r = 0; r < shape.blocks.length; r++) {
             for (let c = 0; c < shape.blocks[r].length; c++) {
                 if (shape.blocks[r][c]) {
                     if (isSpawnBombTurn) {
-                        grid[row + r][col + c] = { type: 'bomb', color: '#000000', timer: 9 };
-                        isSpawnBombTurn = false; // drop only one per turn maximum
+                        grid[row + r][col + c] = { type: 'bomb', color: '#3a0007', timer: 8 };
+                        isSpawnBombTurn = false; 
                     } else {
                         grid[row + r][col + c] = shape.color;
                     }
@@ -526,10 +720,17 @@
         }
         score += points;
 
-        // Process step logic updates
         if (currentGameMode === 'blast') tickBombs();
         checkLines();
-        if (currentGameMode === 'timed') timeRemaining = Math.min(100, timeRemaining + (points * 2.5)); // Reward placing blocks
+        if (currentGameMode === 'timed') timeRemaining = Math.min(100, timeRemaining + (points * 2.0)); 
+
+        // --- Milestone Reward checks ---
+        if (score >= nextScoreMilestone) {
+            boosters.auto++;
+            nextScoreMilestone += 1000; 
+            updateBoosterUI();
+            triggerToast("+1 Auto-Clear Earned! ✨");
+        }
     }
 
     function tickBombs() {
@@ -572,7 +773,21 @@
             score += linesCleared * 25 * linesCleared; 
             
             if (currentGameMode === 'timed') {
-                timeRemaining = Math.min(100, timeRemaining + (linesCleared * 15)); // Add chunk of time back
+                timeRemaining = Math.min(100, timeRemaining + (linesCleared * 12)); 
+                // Double Combo or better rewards a booster item
+                if (linesCleared >= 2) {
+                    boosters.time++;
+                    updateBoosterUI();
+                    triggerToast("Combo! +1 Time item Earned! ⏱️");
+                }
+            }
+
+            if (currentGameMode === 'blast') {
+                if (linesCleared >= 2) {
+                    boosters.defuse++;
+                    updateBoosterUI();
+                    triggerToast("Combo! +1 Defuse item Earned! 🧨");
+                }
             }
 
             if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
