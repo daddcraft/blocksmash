@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Block Smash</title>
+    <link rel="manifest" href="manifest.json">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0d0d12">
+    
+    <style>
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            user-select: none; 
+            -webkit-user-select: none; 
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0d0d12;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: calc(20px + env(safe-area-inset-top)) 15px calc(20px + env(safe-area-inset-bottom)) 15px;
+            touch-action: none;
+            position: relative;
+        }
+
+        #app-header {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .brand-title {
+            font-size: 26px;
+            font-weight: 800;
+            background: linear-gradient(45deg, #ff5722, #ffeb3b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        #mode-tag {
+            font-size: 12px;
+            color: #8e8e93;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: -4px;
+        }
+
+        .stats-display {
+            display: flex;
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 6px 14px;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #8e8e93;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* Mode Dynamic Timer Bar Container */
+        #timer-bar-container {
+            width: 100%;
+            max-width: 400px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            display: none; /* Only visible in Timed mode */
+        }
+
+        #timer-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #34c759, #ffcc00, #ff3b30);
+            transition: width 0.1s linear;
+        }
+
+        #canvas-wrapper {
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 400 / 580;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            background: #16161e;
+            border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Main Menu App Overlay Screen */
+        #menu-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(13, 13, 18, 0.95);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+        }
+
+        .menu-title {
+            font-size: 42px;
+            font-weight: 900;
+            margin-bottom: 40px;
+            background: linear-gradient(45deg, #ff5722, #ffeb3b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+        }
+
+        .menu-btn {
+            width: 100%;
+            max-width: 280px;
+            background: #1e1e28;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: 700;
+            border-radius: 16px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            transition: transform 0.1s;
+        }
+
+        .menu-btn:active {
+            transform: scale(0.97);
+            background: #252535;
+        }
+
+        .menu-btn span {
+            font-size: 12px;
+            font-weight: 400;
+            color: #8e8e93;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Menu Overlay UI Grid Screen -->
+<div id="menu-overlay">
+    <h1 class="menu-title">Block Smash</h1>
+    <button class="menu-btn" onclick="startGame('classic')">
+        Classic Mode
+        <span>Relaxed traditional puzzle logic</span>
+    </button>
+    <button class="menu-btn" onclick="startGame('timed')">
+        Timed Mode
+        <span>Smash lines to stay alive!</span>
+    </button>
+    <button class="menu-btn" onclick="startGame('blast')">
+        Blast Mode
+        <span>Defuse bombs before they blow!</span>
+    </button>
+</div>
+
+<header id="app-header">
+    <div>
+        <h1 class="brand-title">Block Smash</h1>
+        <div id="mode-tag">Classic</div>
+    </div>
+    <div class="stats-display">
+        <div class="stat-card">
+            <div class="stat-label">Score</div>
+            <div class="stat-value" id="score">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Best</div>
+            <div class="stat-value" id="best">0</div>
+        </div>
+    </div>
+</header>
+
+<div id="timer-bar-container">
+    <div id="timer-bar"></div>
+</div>
+
+<div id="canvas-wrapper">
+    <canvas id="gameCanvas" width="400" height="580"></canvas>
+</div>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        });
+    }
+
+    document.addEventListener('touchmove', (e) => { if(e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const modeTagEl = document.getElementById('mode-tag');
+    const timerBarContainer = document.getElementById('timer-bar-container');
+    const timerBar = document.getElementById('timer-bar');
+    const menuOverlay = document.getElementById('menu-overlay');
+
+    const GRID_SIZE = 8;
+    const CELL_SIZE = 44;
+    const GRID_OFFSET_X = 24;
+    const GRID_OFFSET_Y = 24;
+    
+    let score = 0;
+    let currentGameMode = 'classic';
+    let bestScore = 0;
+
+    // Grid cells lookups: 0 = empty, string = static color, object = complex attributes (like bomb)
+    let grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+
+    const SHAPES = [
+        { blocks: [[1]], color: '#FF3B30' }, 
+        { blocks: [[1, 1]], color: '#34C759' }, 
+        { blocks: [[1], [1]], color: '#34C759' }, 
+        { blocks: [[1, 1, 1]], color: '#007AFF' }, 
+        { blocks: [[1], [1], [1]], color: '#007AFF' },
+        { blocks: [[1, 1], [1, 1]], color: '#FFCC00' }, 
+        { blocks: [[1, 1, 1], [0, 1, 0]], color: '#AF52DE' }, 
+        { blocks: [[1, 0], [1, 0], [1, 1]], color: '#FF9500' }, 
+        { blocks: [[1, 1], [0, 1], [0, 1]], color: '#FF2D55' }  
+    ];
+
+    let choices = [null, null, null];
+    const CHOICE_Y = 440;
+    const CHOICE_X_SPOTS = [40, 160, 280];
+    const CHOICE_MAX_WIDTH = 80;
+
+    let dragIdx = -1;
+    let dragX = 0;
+    let dragY = 0;
+    let isDragging = false;
+
+    // Timed Mode Variables
+    let timeRemaining = 100; // Percentage out of 100
+    let timerInterval = null;
+
+    function startGame(mode) {
+        currentGameMode = mode;
+        menuOverlay.style.display = 'none';
+        modeTagEl.innerText = mode;
+
+        // Fetch high score dynamically per game mode ruleset
+        bestScore = localStorage.getItem(`block_smash_best_${mode}`) || 0;
+        bestEl.innerText = bestScore;
+
+        if (mode === 'timed') {
+            timerBarContainer.style.display = 'block';
+            timeRemaining = 100;
+            startTimedTicker();
+        } else {
+            timerBarContainer.style.display = 'none';
+            clearInterval(timerInterval);
+        }
+
+        init();
+    }
+
+    function startTimedTicker() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timeRemaining -= 1.5; // Tick speed
+            if (timeRemaining <= 0) {
+                timeRemaining = 0;
+                gameOver("Time's Up!");
+            }
+            timerBar.style.width = `${timeRemaining}%`;
+        }, 150);
+    }
+
+    function init() {
+        grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+        score = 0;
+        scoreEl.innerText = score;
+        generateChoices();
+        draw();
+    }
+
+    function generateChoices() {
+        for (let i = 0; i < 3; i++) {
+            if (choices[i] === null) {
+                const randShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+                choices[i] = JSON.parse(JSON.stringify(randShape)); 
+            }
+        }
+    }
+
+    function canFitSomewhere(shape) {
+        if (!shape) return true;
+        for (let r = 0; r <= GRID_SIZE - shape.blocks.length; r++) {
+            for (let c = 0; c <= GRID_SIZE - shape.blocks[0].length; c++) {
+                if (canPlace(shape, r, c)) return true;
+            }
+        }
+        return false;
+    }
+
+    function gameOver(reason) {
+        clearInterval(timerInterval);
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        alert(`Game Over! ${reason}\nFinal Score: ${score}`);
+        
+        if (score > bestScore) {
+            bestScore = score;
+            localStorage.setItem(`block_smash_best_${currentGameMode}`, bestScore);
+            bestEl.innerText = bestScore;
+        }
+        
+        menuOverlay.style.display = 'flex';
+    }
+
+    function checkGameOver() {
+        let anyFit = false;
+        for (let i = 0; i < 3; i++) {
+            if (choices[i] && canFitSomewhere(choices[i])) {
+                anyFit = true;
+                break;
+            }
+        }
+        if (!anyFit && choices.some(c => c !== null)) {
+            gameOver("No moves left!");
+        }
+    }
+
+    function drawBlock(x, y, size, cell, isGhost = false) {
+        ctx.save();
+        if (isGhost) ctx.globalAlpha = 0.3;
+        
+        // Handle complex structures (like bombs) vs regular strings
+        let color = (typeof cell === 'object') ? cell.color : cell;
+
+        // Block base profile body
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x + 1, y + 1, size - 2, size - 2, 6);
+        ctx.fill();
+
+        if (!isGhost) {
+            // Bevel highlights
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            ctx.beginPath();
+            ctx.roundRect(x + 2, y + 2, size - 4, 6, 2);
+            ctx.fill();
+
+            // Special Blast Mode overlay rendering
+            if (typeof cell === 'object' && cell.type === 'bomb') {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${Math.floor(size * 0.45)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cell.timer, x + size/2, y + size/2 + 1);
+            }
+        }
+
+        ctx.restore();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Grid Housing Base Layer
+        ctx.fillStyle = '#1e1e28';
+        ctx.beginPath();
+        ctx.roundRect(GRID_OFFSET_X - 6, GRID_OFFSET_Y - 6, (GRID_SIZE * CELL_SIZE) + 12, (GRID_SIZE * CELL_SIZE) + 12, 16);
+        ctx.fill();
+        
+        // Matrix Render Engine loops
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                let x = GRID_OFFSET_X + c * CELL_SIZE;
+                let y = GRID_OFFSET_Y + r * CELL_SIZE;
+                if (grid[r][c] === 0) {
+                    ctx.fillStyle = '#252532';
+                    ctx.beginPath();
+                    ctx.roundRect(x + 1.5, y + 1.5, CELL_SIZE - 3, CELL_SIZE - 3, 6);
+                    ctx.fill();
+                } else {
+                    drawBlock(x, y, CELL_SIZE, grid[r][c]);
+                }
+            }
+        }
+
+        // 2. Real-time Ghost Placement Shadow engine calculations
+        let snapRow = -1, snapCol = -1;
+        if (isDragging && dragIdx !== -1) {
+            let shape = choices[dragIdx];
+            let offsetX = (shape.blocks[0].length * CELL_SIZE) / 2;
+            let offsetY = (shape.blocks.length * CELL_SIZE) + 35; 
+            let targetX = dragX - offsetX;
+            let targetY = dragY - offsetY;
+            snapCol = Math.round((targetX - GRID_OFFSET_X) / CELL_SIZE);
+            snapRow = Math.round((targetY - GRID_OFFSET_Y) / CELL_SIZE);
+
+            if (canPlace(shape, snapRow, snapCol)) {
+                for (let r = 0; r < shape.blocks.length; r++) {
+                    for (let c = 0; c < shape.blocks[r].length; c++) {
+                        if (shape.blocks[r][c]) {
+                            let gx = GRID_OFFSET_X + (snapCol + c) * CELL_SIZE;
+                            let gy = GRID_OFFSET_Y + (snapRow + r) * CELL_SIZE;
+                            drawBlock(gx, gy, CELL_SIZE, shape.color, true);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Selection Tray Dock
+        ctx.fillStyle = '#12121a';
+        ctx.beginPath();
+        ctx.roundRect(16, CHOICE_Y - 10, canvas.width - 32, 130, 20);
+        ctx.fill();
+
+        // Stationed Pieces Render Engine
+        for (let i = 0; i < 3; i++) {
+            if (choices[i] && dragIdx !== i) {
+                let shape = choices[i];
+                let miniCellSize = 18; 
+                let sWidth = shape.blocks[0].length * miniCellSize;
+                let sHeight = shape.blocks.length * miniCellSize;
+                let startX = CHOICE_X_SPOTS[i] + (CHOICE_MAX_WIDTH - sWidth) / 2;
+                let startY = CHOICE_Y + (110 - sHeight) / 2;
+
+                for (let r = 0; r < shape.blocks.length; r++) {
+                    for (let c = 0; c < shape.blocks[r].length; c++) {
+                        if (shape.blocks[r][c]) {
+                            drawBlock(startX + c * miniCellSize, startY + r * miniCellSize, miniCellSize, shape.color);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Live Drag Object Rendering
+        if (isDragging && dragIdx !== -1) {
+            let shape = choices[dragIdx];
+            let offsetX = (shape.blocks[0].length * CELL_SIZE) / 2;
+            let offsetY = (shape.blocks.length * CELL_SIZE) + 35; 
+
+            for (let r = 0; r < shape.blocks.length; r++) {
+                for (let c = 0; c < shape.blocks[r].length; c++) {
+                    if (shape.blocks[r][c]) {
+                        let bx = dragX - offsetX + c * CELL_SIZE;
+                        let by = dragY - offsetY + r * CELL_SIZE;
+                        drawBlock(bx, by, CELL_SIZE, shape.color);
+                    }
+                }
+            }
+        }
+    }
+
+    function canPlace(shape, row, col) {
+        for (let r = 0; r < shape.blocks.length; r++) {
+            for (let c = 0; c < shape.blocks[r].length; c++) {
+                if (shape.blocks[r][c]) {
+                    if (row + r >= GRID_SIZE || col + c >= GRID_SIZE || row + r < 0 || col + c < 0) return false;
+                    if (grid[row + r][col + c] !== 0) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    function placeShape(shape, row, col) {
+        let points = 0;
+        let isSpawnBombTurn = (currentGameMode === 'blast' && Math.random() < 0.25); // 25% chance of placed block conversion to bomb
+
+        for (let r = 0; r < shape.blocks.length; r++) {
+            for (let c = 0; c < shape.blocks[r].length; c++) {
+                if (shape.blocks[r][c]) {
+                    if (isSpawnBombTurn) {
+                        grid[row + r][col + c] = { type: 'bomb', color: '#000000', timer: 9 };
+                        isSpawnBombTurn = false; // drop only one per turn maximum
+                    } else {
+                        grid[row + r][col + c] = shape.color;
+                    }
+                    points++;
+                }
+            }
+        }
+        score += points;
+
+        // Process step logic updates
+        if (currentGameMode === 'blast') tickBombs();
+        checkLines();
+        if (currentGameMode === 'timed') timeRemaining = Math.min(100, timeRemaining + (points * 2.5)); // Reward placing blocks
+    }
+
+    function tickBombs() {
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                let cell = grid[r][c];
+                if (typeof cell === 'object' && cell.type === 'bomb') {
+                    cell.timer--;
+                    if (cell.timer <= 0) {
+                        draw();
+                        setTimeout(() => { gameOver("A bomb exploded!"); }, 10);
+                    }
+                }
+            }
+        }
+    }
+
+    function checkLines() {
+        let rowsToRemove = [];
+        let colsToRemove = [];
+
+        for (let r = 0; r < GRID_SIZE; r++) {
+            if (grid[r].every(cell => cell !== 0)) rowsToRemove.push(r);
+        }
+        for (let c = 0; c < GRID_SIZE; c++) {
+            let colFull = true;
+            for (let r = 0; r < GRID_SIZE; r++) {
+                if (grid[r][c] === 0) { colFull = false; break; }
+            }
+            if (colFull) colsToRemove.push(c);
+        }
+
+        rowsToRemove.forEach(r => grid[r].fill(0));
+        colsToRemove.forEach(c => {
+            for (let r = 0; r < GRID_SIZE; r++) grid[r][c] = 0;
+        });
+
+        let linesCleared = rowsToRemove.length + colsToRemove.length;
+        if (linesCleared > 0) {
+            score += linesCleared * 25 * linesCleared; 
+            
+            if (currentGameMode === 'timed') {
+                timeRemaining = Math.min(100, timeRemaining + (linesCleared * 15)); // Add chunk of time back
+            }
+
+            if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+        }
+        scoreEl.innerText = score;
+    }
+
+    function getCanvasCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * (canvas.width / rect.width),
+            y: (clientY - rect.top) * (canvas.height / rect.height)
+        };
+    }
+
+    function handleStart(e) {
+        const coords = getCanvasCoords(e);
+        for (let i = 0; i < 3; i++) {
+            if (choices[i]) {
+                let xStart = CHOICE_X_SPOTS[i];
+                let xEnd = xStart + CHOICE_MAX_WIDTH;
+                let yStart = CHOICE_Y - 10;
+                let yEnd = CHOICE_Y + 120;
+
+                if (coords.x >= xStart && coords.x <= xEnd && coords.y >= yStart && coords.y <= yEnd) {
+                    dragIdx = i;
+                    isDragging = true;
+                    dragX = coords.x;
+                    dragY = coords.y;
+                    if (navigator.vibrate) navigator.vibrate(15);
+                    break;
+                }
+            }
+        }
+    }
+
+    function handleMove(e) {
+        if (!isDragging) return;
+        const coords = getCanvasCoords(e);
+        dragX = coords.x;
+        dragY = coords.y;
+        draw();
+    }
+
+    function handleEnd(e) {
+        if (!isDragging) return;
+        
+        let shape = choices[dragIdx];
+        let offsetX = (shape.blocks[0].length * CELL_SIZE) / 2;
+        let offsetY = (shape.blocks.length * CELL_SIZE) + 35;
+
+        let targetX = dragX - offsetX;
+        let targetY = dragY - offsetY;
+
+        let col = Math.round((targetX - GRID_OFFSET_X) / CELL_SIZE);
+        let row = Math.round((targetY - GRID_OFFSET_Y) / CELL_SIZE);
+
+        if (canPlace(shape, row, col)) {
+            placeShape(shape, row, col);
+            choices[dragIdx] = null;
+            if (choices.every(c => c === null)) generateChoices();
+        }
+        
+        isDragging = false;
+        dragIdx = -1;
+        draw();
+        setTimeout(checkGameOver, 100);
+    }
+
+    canvas.addEventListener('mousedown', handleStart);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+
+    canvas.addEventListener('touchstart', handleStart, { passive: false });
+    window.addEventListener('touchmove', handleMove, { passive: false });
+    window.addEventListener('touchend', handleEnd, { passive: false });
+</script>
+</body>
+</html>
